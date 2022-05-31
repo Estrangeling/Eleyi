@@ -38,11 +38,13 @@ def rotate(pos, angle, center=(0, 0)):
     return (px1, py1)
 
 def initial_position(unit, sides):
+    assert sides >= 3
     half = unit/2
     angle = 180/sides
     return (half, -half/tan(angle))
 
 def make_polygon(init_pos, sides):
+    assert sides >= 3
     angle = 360/sides
     points = [init_pos]
     for i in range(1, sides):
@@ -84,6 +86,7 @@ def nested_polygon_spiral(sides, angle, iterations, unit=1, num_colors=12):
     return {'polygons': polygons, 'colors': colors}
 
 def plot_nested_polygon_spiral(sides, angle, iterations, unit=1, width=1920, height=1080, lw=2, alpha=1, num_colors=12, show=True):
+    assert sides >= 3
     fig = plt.figure(figsize=(width/100, height/100), dpi=100, facecolor='black')
     ax = fig.add_subplot(111)
     ax.set_axis_off()
