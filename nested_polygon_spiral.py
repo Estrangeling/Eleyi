@@ -60,6 +60,7 @@ def displace(pos1, pos2, d):
     return (x1 + d*cos(angle), y1 + d*sin(angle))
 
 def nested_polygon_spiral(sides, angle, iterations, unit=1, num_colors=12):
+    assert sides >= 3
     assert iterations > 1
     beta = 180 * (sides - 2) / sides
     ratio = displace_ratio(beta, angle)
