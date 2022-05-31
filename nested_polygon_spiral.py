@@ -62,7 +62,6 @@ def displace(pos1, pos2, d):
 def nested_polygon_spiral(sides, angle, iterations, unit=1, num_colors=12):
     assert iterations > 1
     beta = 180 * (sides - 2) / sides
-    assert 0 < angle < beta
     ratio = displace_ratio(beta, angle)
     step = 1530/num_colors
     color_values = ['#'+spectrum_position(round(step*i), 1) for i in range(num_colors)]
