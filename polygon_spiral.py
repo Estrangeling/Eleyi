@@ -1,22 +1,20 @@
+import colorsys
 import matplotlib.pyplot as plt
 import numpy as np
+import random
+from functools import lru_cache
 from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.patches import Arc
 from PIL import Image
 
+@lru_cache(maxsize=None)
 def sin(d: float): return np.sin(np.radians(d))
+@lru_cache(maxsize=None)
 def cos(d: float): return np.cos(np.radians(d))
+@lru_cache(maxsize=None)
 def tan(d: float): return np.tan(np.radians(d))
+@lru_cache(maxsize=None)
 def atan2(x, y): return np.rad2deg(np.arctan2(y, x))
-
-def rotate(pos, angle, center=(0, 0)):
-    cx, cy = center
-    px, py = pos
-    diff_x, diff_y = (px - cx), (py - cy)
-    cosa, sina = cos(angle), sin(angle)
-    px1 = cosa * diff_x - sina * diff_y + cx
-    py1 = sina * diff_x + cosa * diff_y + cy
-    return (px1, py1)
 
 def spectrum_position(n, string=False):
     if not isinstance(n, int):
@@ -37,26 +35,23 @@ def spectrum_position(n, string=False):
     elif 1275 <= n < 1530:
         return (255, 0, 1530-n) if not string else f'ff00{1530-n:02x}'
     
-def increment_rotate(pos1, pos2, rotation):
-    x1, y1 = pos1
-    x2, y2 = pos2
-    side = ((x2-x1)**2+(y2-y1)**2)**.5
-    angle = atan2((x2 - x1), (y2 - y1))
-    new_x, new_y = x2+side*cos(angle), y2+side*sin(angle)
-    new_x, new_y = rotate((new_x, new_y), rotation, (x2, y2))
-    return new_x, new_y
+def next_vertex(pos1, pos2, rotation):
+    (x1, y1), (x2, y2) = pos1, pos2
+    cosa, sina = cos(rotation), sin(rotation)
+    dx, dy = x2 - x1, y2 - y1
+    x3 = dx * cosa - dy * sina + x2
+    y3 = dy * cosa + dx * sina + y2
+    return x3, y3
 
 def make_polygon(pos1, pos2, sides):
     assert sides >= 3
     unit_rotation = 360/sides
-    x1, y1 = pos1
-    x2, y2 = pos2
-    side = ((x2-x1)**2+(y2-y1)**2)**.5
+    (x1, y1), (x2, y2) = pos1, pos2
     positions = [pos1]
     prev_pos = pos2
     cur_pos = pos1
     for i in range(sides-2):
-        new_pos = increment_rotate(prev_pos, cur_pos, unit_rotation)
+        new_pos = next_vertex(prev_pos, cur_pos, unit_rotation)
         positions.append(new_pos)
         prev_pos = cur_pos
         cur_pos = new_pos
@@ -74,9 +69,12 @@ def mid(pos1, pos2):
     
     return (x1 + (x2 - x1)/2, y1 + (y2 - y1)/2)
 
-def polygon_spiral(unit, iterations, num_colors=12):
+def polygon_spiral(iterations, unit=1, num_colors=12, color_start=None):
     step = 1530/num_colors
+    if color_start is None:
+        color_start = random.random()
     palette = ['#'+spectrum_position(round(step*i), 1) for i in range(num_colors)]
+    hues = [(color_start + i/3) % 1 for i in range(3)]
     colors = [palette[0]]
     radius = unit*cos(30)/1.5
     y1 = -radius/2
@@ -84,6 +82,7 @@ def polygon_spiral(unit, iterations, num_colors=12):
     x2 = unit/2
     points = [(0, radius), (x2, y1), (x1, y1)]
     polygons = [points]
+    strips = []
     lines = [[(0, 0), (x1/2, radius/4)], [(0, 0), (0, y1)], [(0, 0), (x2/2, radius/4)]]
     side = 4
     left_start, left_end = points[0], points[2]
@@ -131,6 +130,26 @@ def polygon_spiral(unit, iterations, num_colors=12):
                 theta1, theta2 = theta2 - 360, theta1
             arcs.append([(a, b), r, theta1, theta2])
     
+    strip_colors = []
+    L = len(arcs)
+    for i in range(3):
+        level = 0
+        for first, second in zip(arcs[i:L:3], arcs[i+3:L:3]):
+            f = 1 - level / iterations
+            r, g, b = colorsys.hsv_to_rgb(hues[i], f, f)
+            strip_colors.append('#{:02x}{:02x}{:02x}'.format(round(r*255), round(g*255), round(b*255)))
+            vertices = []
+            (a, b), r, theta1, theta2 = first
+            for n in range(61):
+                angle = theta1+n
+                vertices.append((a+r*cos(angle), b+r*sin(angle)))
+            (a, b), r, theta1, theta2 = second
+            for n in range(61):
+                angle = theta2-n
+                vertices.append((a+r*cos(angle), b+r*sin(angle)))
+            strips.append(vertices)
+            level += 1
+    
     (x0, y0), (x1, y1), (x2, y2) = [lines[i][-1] for i in range(3)]
     dx = x1 - x0
     dy = y1 - y0
@@ -166,25 +185,28 @@ def polygon_spiral(unit, iterations, num_colors=12):
             y_min = y_max - r
     
     
-    return {'polygons': polygons, 'lines': lines, 'arcs': arcs, 'colors': colors, 'edges': [x_min, x_max, y_min, y_max]}
+    return {'polygons': polygons, 'lines': lines, 'arcs': arcs, 'strips': strips, 'colors': colors, 'strip_colors': strip_colors, 'edges': [x_min, x_max, y_min, y_max]}
 
-def plot_polygon_spiral(iterations, unit=1, width=1920, height=1080, lw=2, alpha=1, num_colors=12, arms=True, show=True):
-    polygons, lines, arcs, colors, edges = polygon_spiral(unit, iterations, num_colors).values()
+def plot_polygon_spiral(iterations, mode='strips', unit=1, width=1920, height=1080, lw=2, alpha=1, num_colors=12, color_start=None, show=True):
+    assert mode in ('arcs', 'arms', 'strips')
+    polygons, lines, arcs, strips, colors, strip_colors, edges = polygon_spiral(iterations, unit, num_colors, color_start).values()
     fig = plt.figure(figsize=(width/100, height/100),
                  dpi=100, facecolor='black')
     ax = fig.add_subplot(111)
     ax.set_axis_off()
-    if arms:
+    if mode == 'arms':
         collection = PolyCollection(polygons, facecolors=colors, lw=lw, alpha=alpha, edgecolor='w')
-    else:
+    elif mode == 'arcs':
         for center, r, theta1, theta2 in arcs:
             ax.add_patch(Arc(center, 2*r, 2*r, theta1=theta1, theta2=theta2, lw=lw, alpha=alpha, edgecolor='w'))
         collection = LineCollection(lines, lw=lw, alpha=alpha, edgecolor='w')
+    else:
+        collection = PolyCollection(strips, facecolors=strip_colors, lw=lw, alpha=alpha, edgecolor='w')
     ax.add_collection(collection)
-        
     plt.axis('scaled')
     fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
-    plt.axis(edges)
+    if mode != 'arms':
+        plt.axis(edges)
     fig.canvas.draw()
     image = Image.frombytes(
         'RGB', fig.canvas.get_width_height(), fig.canvas.tostring_rgb())
