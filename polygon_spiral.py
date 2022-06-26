@@ -1,7 +1,7 @@
-import colorsys
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+from colorsys import hsv_to_rgb
 from functools import lru_cache
 from matplotlib.collections import LineCollection, PolyCollection
 from matplotlib.patches import Arc
@@ -69,11 +69,11 @@ def mid(pos1, pos2):
     
     return (x1 + (x2 - x1)/2, y1 + (y2 - y1)/2)
 
-def polygon_spiral(iterations, unit=1, num_colors=12, color_start=None):
+def polygon_spiral(iterations, unit=1, num_colors=12, color_start=None, rainbow=False):
     step = 1530/num_colors
     if color_start is None:
         color_start = random.random()
-    palette = ['#'+spectrum_position(round(step*i), 1) for i in range(num_colors)]
+    palette = ['#'+spectrum_position(round(color_start*1530+step*i)%1530, 1) for i in range(num_colors)]
     hues = [(color_start + i/3) % 1 for i in range(3)]
     colors = [palette[0]]
     radius = unit*cos(30)/1.5
@@ -131,13 +131,18 @@ def polygon_spiral(iterations, unit=1, num_colors=12, color_start=None):
             arcs.append([(a, b), r, theta1, theta2])
     
     strip_colors = []
+    edge_colors = []
     L = len(arcs)
     for i in range(3):
         level = 0
         for first, second in zip(arcs[i:L:3], arcs[i+3:L:3]):
             f = 1 - level / iterations
-            r, g, b = colorsys.hsv_to_rgb(hues[i], f, f)
-            strip_colors.append('#{:02x}{:02x}{:02x}'.format(round(r*255), round(g*255), round(b*255)))
+            if not rainbow:
+                strip_colors.append('#{:02x}{:02x}{:02x}'.format(*[round(j*255) for j in hsv_to_rgb(hues[i], f, f)]))
+                edge_colors.append('#{:02x}{:02x}{:02x}'.format(*[round(j*255) for j in hsv_to_rgb(0, 0, f)]))
+            else:
+                strip_colors.append('#{:02x}{:02x}{:02x}'.format(*[round(j*255) for j in hsv_to_rgb((color_start+(level%num_colors)/num_colors)%1, f, f)]))
+                edge_colors.append('#{:02x}{:02x}{:02x}'.format(*[round(j*255) for j in hsv_to_rgb(0, 0, f)]))
             vertices = []
             (a, b), r, theta1, theta2 = first
             for n in range(61):
@@ -185,11 +190,11 @@ def polygon_spiral(iterations, unit=1, num_colors=12, color_start=None):
             y_min = y_max - r
     
     
-    return {'polygons': polygons, 'lines': lines, 'arcs': arcs, 'strips': strips, 'colors': colors, 'strip_colors': strip_colors, 'edges': [x_min, x_max, y_min, y_max]}
+    return {'polygons': polygons, 'lines': lines, 'arcs': arcs, 'strips': strips, 'colors': colors, 'strip_colors': strip_colors, 'edge_colors': edge_colors, 'edges': [x_min, x_max, y_min, y_max]}
 
-def plot_polygon_spiral(iterations, mode='strips', unit=1, width=1920, height=1080, lw=2, alpha=1, num_colors=12, color_start=None, show=True):
+def plot_polygon_spiral(iterations, mode='strips', unit=1, width=1920, height=1080, lw=2, alpha=1, num_colors=12, color_start=None, show=True, random_colors=False, rainbow=False):
     assert mode in ('arcs', 'arms', 'strips')
-    polygons, lines, arcs, strips, colors, strip_colors, edges = polygon_spiral(iterations, unit, num_colors, color_start).values()
+    polygons, lines, arcs, strips, colors, strip_colors, edge_colors, edges = polygon_spiral(iterations, unit, num_colors, color_start, rainbow).values()
     fig = plt.figure(figsize=(width/100, height/100),
                  dpi=100, facecolor='black')
     ax = fig.add_subplot(111)
@@ -201,7 +206,9 @@ def plot_polygon_spiral(iterations, mode='strips', unit=1, width=1920, height=10
             ax.add_patch(Arc(center, 2*r, 2*r, theta1=theta1, theta2=theta2, lw=lw, alpha=alpha, edgecolor='w'))
         collection = LineCollection(lines, lw=lw, alpha=alpha, edgecolor='w')
     else:
-        collection = PolyCollection(strips, facecolors=strip_colors, lw=lw, alpha=alpha, edgecolor='w')
+        if random_colors:
+            strip_colors = np.random.random(size=[iterations*3, 3])
+        collection = PolyCollection(strips, facecolors=strip_colors, lw=lw, alpha=alpha, edgecolors=edge_colors)
     ax.add_collection(collection)
     plt.axis('scaled')
     fig.subplots_adjust(left=0, bottom=0, right=1, top=1, wspace=0, hspace=0)
