@@ -154,7 +154,7 @@ def polar_plot(
     length: int = 1080,
     colorize: bool = False,
     mode: PLOT = "scatter",
-    domain: SERIES = "prime",
+    domain: SERIES = "primes",
     one_based: bool = False,
     projection: Literal["polar", "Sacks"] = "polar",
     base: int = 10,
